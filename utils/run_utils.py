@@ -5,6 +5,7 @@ import math
 from mxnet.gluon.block import HybridBlock
 from mxnet.gluon import nn
 from math import ceil
+__all__ = ['SamePadding']
 class SamePadding(HybridBlock):
     def __init__(self, **kwargs):
         super(SamePadding, self).__init__(**kwargs)
