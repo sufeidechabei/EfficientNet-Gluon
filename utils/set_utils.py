@@ -1,10 +1,16 @@
 import os
+import random
+import mxnet as mx
+import numpy as np
 
 
 
 #########
 # Setup #
 #########
+
+
+__all__ = ['mkdir_p', 'set_log_dir', 'save_arg_dict', 'format_value', 'ImageNetSetting', 'set_random_seed']
 def mkdir_p(path):
     import errno
     try:
@@ -38,3 +44,17 @@ def format_value(v):
         return '{:d}'.format(v)
     else:
         return '{}'.format(v)
+
+def ImageNetSetting(args):
+    if args['dataset'] == 'imagenet':
+        new_dict = {'optimizer': 'RMSProp',
+                    'start_lr': 0.256}
+    args.update(new_dict)
+
+def set_random_seed(ctx, seed):
+    if seed is None:
+        seed = random.randint(1, 10000)
+    random.seed(seed)
+    np.random.seed(seed)
+    mx.random.seed(seed, ctx)
+    return seed
