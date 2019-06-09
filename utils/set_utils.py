@@ -2,6 +2,7 @@ import os
 import random
 import mxnet as mx
 import numpy as np
+import pprint
 
 
 
@@ -33,6 +34,7 @@ def save_arg_dict(args, filename='settings.txt'):
         for key, value in args.items():
             if isinstance(value, (str, int, float, list)):
                 f.write('{}\t{}\n'.format(key, format_value(value)))
+    pprint(args)
     print('Saved settings to {}'.format(path_to_file))
 
 def format_value(v):
