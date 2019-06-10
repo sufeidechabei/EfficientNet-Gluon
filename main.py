@@ -9,6 +9,7 @@ from mxnet.gluon.data.vision import transforms
 from gluoncv.data import imagenet
 from model import get_efficientnet
 from gluoncv.utils import makedirs, LRSequential, LRScheduler
+from mxnet.lr_scheduler import FactorScheduler
 from utils import *
 
 
@@ -31,36 +32,32 @@ def parse_args():
                         help='training batch size per device (CPU/GPU).')
     parser.add_argument('--dtype', type=str, default='float32',
                         help='data type for training. default is float32')
-    parser.add_argument('--num-gpus', type=int, default=8,
+    parser.add_argument('--num-gpus', type=int, default=4,
                         help='number of gpus to use.')
     parser.add_argument('-j', '--num-data-workers', dest='num_workers', default=4, type=int,
                         help='number of preprocessing workers')
     parser.add_argument('--num-epochs', type=int, default=3,
                         help='number of training epochs.')
-    parser.add_argument('--lr', type=float, default=0.1,
-                        help='learning rate. default is 0.1.')
+    parser.add_argument('--lr', type=float, default=0.256,
+                        help='learning rate. default is 0.256.')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum value for optimizer, default is 0.9.')
-    parser.add_argument('--wd', type=float, default=0.0001,
+    parser.add_argument('--wd', type=float, default=1e-5,
                         help='weight decay rate. default is 0.0001.')
-    parser.add_argument('--lr-mode', type=str, default='step',
-                        help='learning rate scheduler mode. options are step, poly and cosine.')
-    parser.add_argument('--lr-decay', type=float, default=0.1,
+    parser.add_argument('--lr-decay', type=float, default=0.97,
                         help='decay rate of learning rate. default is 0.1.')
-    parser.add_argument('--lr-decay-period', type=int, default=0,
+    parser.add_argument('--lr-decay-period', type=int, default=3,
                         help='interval for periodic learning rate decays. default is 0 to disable.')
-    parser.add_argument('--lr-decay-epoch', type=str, default='40,60',
-                        help='epochs at which learning rate decays. default is 40,60.')
     parser.add_argument('--warmup-lr', type=float, default=0.0,
                         help='starting warmup learning rate. default is 0.0.')
-    parser.add_argument('--warmup-epochs', type=int, default=0,
+    parser.add_argument('--warmup-epochs', type=int, default=6,
                         help='number of warmup epochs.')
     parser.add_argument('--last-gamma', action='store_true',
                         help='whether to init gamma of the last BN layer in each bottleneck to 0.')
     parser.add_argument('--mode', type=str,
                         help='mode in which to train the model. options are symbolic, imperative, hybrid')
     parser.add_argument('--model', type=str, choices=['b0', 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'],
-                        help='type of model to use. see vision_model for options.')
+                        help='type of model to use.')
     parser.add_argument('--input-size', type=int, default=224,
                         help='size of the input image size. default is 224')
     parser.add_argument('--crop-ratio', type=float, default=0.875,
@@ -79,10 +76,6 @@ def parse_args():
                         help='use label smoothing or not in training. default is false.')
     parser.add_argument('--no-wd', action='store_true',
                         help='whether to remove weight decay on bias, and beta/gamma for batchnorm layers.')
-    parser.add_argument('--temperature', type=float, default=20,
-                        help='temperature parameter for distillation teacher model')
-    parser.add_argument('--hard-weight', type=float, default=0.5,
-                        help='weight for the loss of one-hot label for distillation training')
     parser.add_argument('--batch-norm', action='store_true',
                         help='enable batch normalization or not in vgg. default is false.')
     parser.add_argument('--save-frequency', type=int, default=10,
@@ -116,7 +109,6 @@ def main(args):
 
     batch_size = args['batch_size']
     classes = 1000
-    num_training_samples = 1281167
 
     num_gpus = args['num_gpus']
     batch_size *= max(1, num_gpus)
@@ -125,28 +117,16 @@ def main(args):
     model_name = 'efficientnet-' + args['model']
     lr_decay = args['lr_decay']
     lr_decay_period = args['lr_decay_period']
-    if args['lr_decay_period'] > 0:
-        lr_decay_epoch = list(range(lr_decay_period, args['num_epochs'], lr_decay_period))
-    else:
-        lr_decay_epoch = [int(i) for i in args['lr_decay_epoch'].split(',')]
-    lr_decay_epoch = [e - args['warmup_epochs'] for e in lr_decay_epoch]
-    num_batches = num_training_samples // batch_size
-
-    lr_scheduler = LRSequential([
-        LRScheduler('linear', base_lr=0, target_lr=args['lr'],
-                    nepochs=args['warmup_epochs'], iters_per_epoch=num_batches),
-        LRScheduler(args['lr_mode'], base_lr=args['lr'], target_lr=0,
-                    nepochs=args['num_epochs'] - args['warmup_epochs'],
-                    iters_per_epoch=num_batches,
-                    step_epoch=lr_decay_epoch,
-                    step_factor=lr_decay, power=2)
-    ])
-
-    optimizer = 'nag'
-    optimizer_params = {'wd': args['wd'], 'momentum': args['momentum'], 'lr_scheduler': lr_scheduler}
+    warmup_steps = args['warmup_epochs']
+    warmup_begin_lr = args['warmup_lr']
+    assert lr_decay_period!=0
+    lr_scheduler = FactorScheduler(lr_decay_period, lr_decay,
+                               warmup_steps=warmup_steps, warmup_begin_lr=warmup_begin_lr)
+    lr_scheduler.base_lr = args['lr']
+    optimizer = 'rmsprop'
+    optimizer_params = {'wd': args['wd'], 'gamma1': args['momentum'], 'learning_rate':args['lr']}
     if args['dtype'] != 'float32':
         optimizer_params['multi_precision'] = True
-
     net, input_size = get_efficientnet(model_name)
     net.cast(args['dtype'])
     if args['resume_params'] is not '':
@@ -267,7 +247,6 @@ def main(args):
     save_frequency = args['save_frequency']
     if args['save_model'] and save_frequency:
         save_dir = args['log_dir']
-
     else:
         save_dir = ''
         save_frequency = 0
@@ -334,7 +313,8 @@ def main(args):
                 train_data.reset()
             train_metric.reset()
             btic = time.time()
-
+            lr = lr_scheduler(epoch + 1)
+            trainer.set_learning_rate(lr)
             for i, batch in enumerate(train_data):
                 data, label = batch_fn(batch, ctx)
 
@@ -379,7 +359,7 @@ def main(args):
                     btic = time.time()
 
             train_metric_name, train_metric_score = train_metric.get()
-            throughput = int(batch_size * i / (time.time() - tic))
+            throughput = int(batch_size * (i+1) / (time.time() - tic))
 
             err_top1_val, err_top5_val = test(ctx, val_data)
 
@@ -412,6 +392,6 @@ if __name__ == '__main__':
     args = args.__dict__
     args['base_dir'] = './efficientnet_' + args['model']
     mkdir_p(args['base_dir'])
-    args['log_dir'] = set_log_dir(args, 1)
+    args['log_dir'] = set_log_dir(args, 2)
     save_arg_dict(args)
     main(args)
