@@ -31,7 +31,7 @@ def parse_args():
                         help='training batch size per device (CPU/GPU).')
     parser.add_argument('--dtype', type=str, default='float32',
                         help='data type for training. default is float32')
-    parser.add_argument('--num-gpus', type=int, default=0,
+    parser.add_argument('--num-gpus', type=int, default=8,
                         help='number of gpus to use.')
     parser.add_argument('-j', '--num-data-workers', dest='num_workers', default=4, type=int,
                         help='number of preprocessing workers')
@@ -100,6 +100,7 @@ def parse_args():
     parser.add_argument('--use-gn', action='store_true',
                         help='whether to use group norm.')
     parser.add_argument('--n_run', default=0, type=int, help="time for running")
+    parser.add_argument('--save_model', type=bool, default=True, help='whether save model')
     args = parser.parse_args()
     return args
 
@@ -121,7 +122,7 @@ def main(args):
     batch_size *= max(1, num_gpus)
     context = [mx.gpu(i) for i in range(num_gpus)] if num_gpus > 0 else [mx.cpu()]
     num_workers = args['num_workers']
-    model_name = 'efficientnet_' + args['model']
+    model_name = 'efficientnet-' + args['model']
     lr_decay = args['lr_decay']
     lr_decay_period = args['lr_decay_period']
     if args['lr_decay_period'] > 0:
@@ -264,7 +265,7 @@ def main(args):
     acc_top5 = mx.metric.TopKAccuracy(5)
 
     save_frequency = args['save_frequency']
-    if args['save_dir'] and save_frequency:
+    if args['save_model'] and save_frequency:
         save_dir = args['log_dir']
 
     else:
@@ -411,6 +412,6 @@ if __name__ == '__main__':
     args = args.__dict__
     args['base_dir'] = './efficientnet_' + args['model']
     mkdir_p(args['base_dir'])
-    set_log_dir(args, 1)
+    args['log_dir'] = set_log_dir(args, 1)
     save_arg_dict(args)
     main(args)
