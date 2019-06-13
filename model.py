@@ -223,16 +223,8 @@ class EfficientNet(nn.HybridBlock):
     r"""
     Parameters
     ----------
-    alpha : float, default 1.0
-        The depth multiplier for controling the model size. The actual number of layers on each channel_size level
-        is equal to the original number of layers multiplied by alpha.
-    beta : float, default 1.0
-        The width multiplier for controling the model size. The actual number of channels
-        is equal to the original channel size multiplied by beta.
-    dropout_rate : float, default 0.0
-        Dropout probability for the final features layer.
-    classes : int, default 1000
-        Number of classes for the output layer.
+    block_args : : list, hyperparamter of every block.
+    global_param: collection.namedtuple, hyperparameter of every layer.
     """
 
     def __init__(self, blocks_args=None, global_params=None, **kwargs):
