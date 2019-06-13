@@ -2,7 +2,7 @@ import os
 import random
 import mxnet as mx
 import numpy as np
-import pprint
+from pprint import pprint
 
 
 

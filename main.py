@@ -8,7 +8,6 @@ from mxnet.gluon.data.vision import transforms
 
 from gluoncv.data import imagenet
 from model import get_efficientnet
-from gluoncv.utils import makedirs, LRSequential, LRScheduler
 from mxnet.lr_scheduler import FactorScheduler
 from utils import *
 
@@ -36,7 +35,7 @@ def parse_args():
                         help='number of gpus to use.')
     parser.add_argument('-j', '--num-data-workers', dest='num_workers', default=4, type=int,
                         help='number of preprocessing workers')
-    parser.add_argument('--num-epochs', type=int, default=3,
+    parser.add_argument('--num-epochs', type=int, default=90,
                         help='number of training epochs.')
     parser.add_argument('--lr', type=float, default=0.256,
                         help='learning rate. default is 0.256.')
@@ -50,7 +49,7 @@ def parse_args():
                         help='interval for periodic learning rate decays. default is 0 to disable.')
     parser.add_argument('--warmup-lr', type=float, default=0.0,
                         help='starting warmup learning rate. default is 0.0.')
-    parser.add_argument('--warmup-epochs', type=int, default=6,
+    parser.add_argument('--warmup-epochs', type=int, default=0,
                         help='number of warmup epochs.')
     parser.add_argument('--last-gamma', action='store_true',
                         help='whether to init gamma of the last BN layer in each bottleneck to 0.')
@@ -119,7 +118,7 @@ def main(args):
     lr_decay_period = args['lr_decay_period']
     warmup_steps = args['warmup_epochs']
     warmup_begin_lr = args['warmup_lr']
-    assert lr_decay_period!=0
+    assert lr_decay_period != 0
     lr_scheduler = FactorScheduler(lr_decay_period, lr_decay,
                                warmup_steps=warmup_steps, warmup_begin_lr=warmup_begin_lr)
     lr_scheduler.base_lr = args['lr']
@@ -131,7 +130,6 @@ def main(args):
     net.cast(args['dtype'])
     if args['resume_params'] is not '':
         net.load_parameters(args['resume_params'], ctx=context)
-
     # Two functions for reading data from record file or raw images
     def get_data_rec(rec_train, rec_train_idx, rec_val, rec_val_idx, batch_size, num_workers):
         rec_train = os.path.expanduser(rec_train)
@@ -277,7 +275,7 @@ def main(args):
         acc_top5.reset()
         for i, batch in enumerate(val_data):
             data, label = batch_fn(batch, ctx)
-            outputs = [net(X.astype(args['dtype'], copy=False)) for X in data]
+            outputs = [net(X.astype(args['dtype'], copy=False), ag.is_training()) for X in data]
             acc_top1.update(label, outputs)
             acc_top5.update(label, outputs)
 
@@ -335,7 +333,7 @@ def main(args):
                     label = smooth(label, classes)
 
                 with ag.record():
-                    outputs = [net(X.astype(args['dtype'], copy=False)) for X in data]
+                    outputs = [net(X.astype(args['dtype'], copy=False), ag.is_training()) for X in data]
                     loss = [L(yhat, y.astype(args['dtype'], copy=False)) for yhat, y in zip(outputs, label)]
                 for l in loss:
                     l.backward()
