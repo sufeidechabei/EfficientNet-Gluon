@@ -312,4 +312,3 @@ def get_efficientnet(model_name):
     blocks_args, global_params = efficientnet(width_coeff, depth_coeff)
     model = EfficientNet(blocks_args, global_params)
     return model, input_resolution
-
