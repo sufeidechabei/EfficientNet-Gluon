@@ -5,7 +5,6 @@ import re
 from mxnet.gluon.block import HybridBlock
 from mxnet.gluon import nn
 
-
 # Parameters for the entire model (stem, all blocks, and head)
 GlobalParams = collections.namedtuple('GlobalParams', [
     'dropout_rate','num_classes', 'width_coefficient', 'depth_coefficient',
@@ -190,7 +189,7 @@ class MBConv(nn.HybridBlock):
             self.out = nn.HybridSequential(prefix = "out_")
             with self.out.name_scope():
                 if t != 1:
-                    _add_conv(self.out, in_channels * t, active=True)
+                    _add_conv(self.out, in_channels * t, active=True, batchnorm=True)
                 _add_conv(self.out, in_channels * t, kernel=kernel, stride=stride, num_group=in_channels * t,
                           active=True, batchnorm=True)
             if se_ratio:
@@ -204,17 +203,18 @@ class MBConv(nn.HybridBlock):
             self.project_layer = nn.HybridSequential(prefix = "project_layer_")
             with self.project_layer.name_scope():
                  _add_conv(self.project_layer,channels, active=False, batchnorm=True)
-    def hybrid_forward(self, F, x):
-        out = self.out(x)
+    def hybrid_forward(self, F, input):
+        x = input
+        x = self.out(x)
         if self.se_ratio:
             out = mx.nd.contrib.AdaptiveAvgPooling2D(x, 1)
             out = self._se_expand(self._se_reduce(out))
-            out = nn.Swish()(out)
+            out = mx.ndarray.sigmoid(out) * x
         out = self.project_layer(out)
         if self.use_shortcut:
             if self.drop_connect_rate:
                 out = drop_connect(out, p=self.drop_connect_rate, training=self.training)
-            out = F.elemwise_add(out, x)
+            out = F.elemwise_add(out, input)
         return out
     def get_mode(self, training):
         self.training = training
@@ -301,6 +301,9 @@ def get_efficientnet(model_name):
         'efficientnet-b7': (2.0, 3.1, 600, 0.5)
     }
     width_coeff, depth_coeff, input_resolution, dropout_rate = params_dict[model_name]
+    blocks_args, global_params = efficientnet(width_coeff, depth_coeff)
+    model = EfficientNet(blocks_args, global_params)
+    return model, input_resolution
     blocks_args, global_params = efficientnet(width_coeff, depth_coeff)
     model = EfficientNet(blocks_args, global_params)
     return model, input_resolution
